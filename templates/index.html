@@ -1,9 +1,12 @@
+
 <!DOCTYPE html>
 <html lang="ta">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI Farmer Friend </title>
+
+<title>AI Farmer Friend</title>
+
 <style>
 body {
   font-family: Arial, sans-serif;
@@ -12,6 +15,7 @@ body {
   padding: 15px;
   margin: 0;
 }
+
 .container {
   max-width: 500px;
   margin: 20px auto;
@@ -20,6 +24,15 @@ body {
   border-radius: 18px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.08);
 }
+
+h1 {
+  font-size: 27px;
+}
+
+p {
+  line-height: 1.5;
+}
+
 button, select, input {
   padding: 14px;
   margin: 8px 0;
@@ -28,9 +41,11 @@ button, select, input {
   width: 100%;
   box-sizing: border-box;
 }
+
 select, input {
   border: 1px solid #ccc;
 }
+
 button {
   background: #168447;
   color: white;
@@ -38,286 +53,678 @@ button {
   cursor: pointer;
   font-weight: bold;
 }
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 #answer {
   background: #f0f7ef;
   padding: 16px;
   border-radius: 12px;
   min-height: 65px;
   text-align: left;
-  line-height: 1.6;
+  line-height: 1.8;
   white-space: pre-line;
+  overflow-wrap: anywhere;
 }
+
 .audio-row {
   display: flex;
   gap: 8px;
 }
+
+.audio-row button {
+  flex: 1;
+}
+
+#status {
+  margin-top: 12px;
+  min-height: 24px;
+}
+
+@media (max-width: 400px) {
+  .container {
+    padding: 15px;
+  }
+
+  h1 {
+    font-size: 24px;
+  }
+
+  button, select, input {
+    font-size: 15px;
+  }
+}
 </style>
 </head>
+
 <body>
 
 <div class="container">
-  <h1>🌾 AI Farmer Friend </h1>
-  <p>விவசாயிகளுக்கான AI உதவியாளர்</p>
 
+  <h1>🌾 AI Farmer Friend</h1>
+
+  <p id="subtitle">விவசாயிகளுக்கான AI உதவியாளர்</p>
+
+  <!-- Language Selection -->
   <select id="language" onchange="onLanguageChange()">
+
     <option value="ta-IN">தமிழ் (Tamil)</option>
+
     <option value="en-IN">English</option>
+
   </select>
 
-  <button type="button" onclick="startListening()">🎤 Ask by Voice</button>
+  <!-- Voice Input -->
+  <button type="button" onclick="startListening()">
+    🎤 <span id="voiceButton">குரல் மூலம் கேளுங்கள்</span>
+  </button>
 
+  <!-- Text Input -->
   <input
     type="text"
     id="textInput"
-    placeholder="Or type your question here and press Enter..."
-    onkeydown="if (event.key === 'Enter') askFromText()"
+    placeholder="உங்கள் கேள்வியை இங்கே தட்டச்சு செய்யவும்..."
+    onkeydown="if(event.key === 'Enter') askFromText()"
   />
-  <button type="button" onclick="askFromText()" style="background:#2b7a78;">📩 Send Question</button>
 
-  <p id="status">Tap the microphone and speak.</p>
+  <!-- Send Question -->
+  <button
+    type="button"
+    onclick="askFromText()"
+    style="background:#2b7a78;"
+  >
+    📩 <span id="sendButton">கேள்வியை அனுப்பு</span>
+  </button>
 
-  <h3>Your Question</h3>
-  <p id="question">Your question appears here.</p>
+  <!-- Status -->
+  <p id="status">
+    மைக்ரோஃபோனை அழுத்தி உங்கள் கேள்வியைக் கேளுங்கள்.
+  </p>
 
-  <h3>AI Answer</h3>
-  <div id="answer">AI answer will appear here.</div>
+  <!-- Question -->
+  <h3 id="questionTitle">உங்கள் கேள்வி</h3>
 
-  <div class="audio-row">
-    <button type="button" onclick="speakAnswer()">🔊 Hear Answer</button>
-    <button type="button" onclick="stopSpeaking()" style="background:#b93829;">⏹ Stop</button>
+  <p id="question">உங்கள் கேள்வி இங்கே தோன்றும்.</p>
+
+  <!-- AI Answer -->
+  <h3 id="answerTitle">AI பதில்</h3>
+
+  <div id="answer">
+    AI பதில் இங்கே தோன்றும்.
   </div>
+
+  <!-- Audio Controls -->
+  <div class="audio-row">
+
+    <button type="button" onclick="speakAnswer()">
+      🔊 <span id="hearButton">பதிலைக் கேளுங்கள்</span>
+    </button>
+
+    <button
+      type="button"
+      onclick="stopSpeaking()"
+      style="background:#b93829;"
+    >
+      ⏹ <span id="stopButton">நிறுத்து</span>
+    </button>
+
+  </div>
+
 </div>
 
+
 <script>
+
 let answerText = "";
-let recognition;
 let latestAnswerText = "";
+let recognition = null;
 let currentSarvamAudio = null;
+
 const SpeechRecognition =
-  window.SpeechRecognition || window.webkitSpeechRecognition;
+  window.SpeechRecognition ||
+  window.webkitSpeechRecognition;
 
 
+// ------------------------------------
+// LANGUAGE TRANSLATIONS
+// ------------------------------------
 
-  
+const translations = {
 
-// Warm up voices list early on browsers that load voices asynchronously
-if ("speechSynthesis" in window) {
-  window.speechSynthesis.getVoices();
-  window.speechSynthesis.addEventListener("voiceschanged", () => {
-    window.speechSynthesis.getVoices();
-  });
-}
+  "ta-IN": {
+
+    subtitle: "விவசாயிகளுக்கான AI உதவியாளர்",
+
+    voiceButton: "குரல் மூலம் கேளுங்கள்",
+
+    placeholder: "உங்கள் கேள்வியை இங்கே தட்டச்சு செய்யவும்...",
+
+    sendButton: "கேள்வியை அனுப்பு",
+
+    initialStatus: "மைக்ரோஃபோனை அழுத்தி உங்கள் கேள்வியைக் கேளுங்கள்.",
+
+    listening: "கேட்கிறது... இப்போது உங்கள் கேள்வியைக் கூறுங்கள்.",
+
+    questionTitle: "உங்கள் கேள்வி",
+
+    questionDefault: "உங்கள் கேள்வி இங்கே தோன்றும்.",
+
+    answerTitle: "AI பதில்",
+
+    answerDefault: "AI பதில் இங்கே தோன்றும்.",
+
+    hearButton: "பதிலைக் கேளுங்கள்",
+
+    stopButton: "நிறுத்து",
+
+    connecting: "AI சேவையுடன் இணைக்கப்படுகிறது...",
+
+    waiting: "தயவுசெய்து காத்திருக்கவும்...",
+
+    success: "பதில் வெற்றிகரமாக கிடைத்தது!",
+
+    emptyQuestion: "தயவுசெய்து உங்கள் கேள்வியை உள்ளிடவும்.",
+
+    noAnswer: "முதலில் ஒரு கேள்வியைக் கேளுங்கள்.",
+
+    emptyAnswer: "AI பதில் கிடைக்கவில்லை.",
+
+    serverError: "சேவையகத்தில் பிழை ஏற்பட்டுள்ளது.",
+
+    unableAnswer: "மன்னிக்கவும், பதிலைப் பெற முடியவில்லை.",
+
+    microphoneError: "மைக்ரோஃபோன் பிழை: ",
+
+    chromeError: "குரல் உள்ளீட்டிற்கு Google Chrome உலாவியைப் பயன்படுத்தவும்.",
+
+    speechError: "குரல் உருவாக்குவதில் பிழை: ",
+
+    audioError: "உருவாக்கப்பட்ட ஒலியை இயக்க முடியவில்லை."
+
+  },
+
+
+  "en-IN": {
+
+    subtitle: "AI Assistant for Farmers",
+
+    voiceButton: "Ask by Voice",
+
+    placeholder: "Or type your question here and press Enter...",
+
+    sendButton: "Send Question",
+
+    initialStatus: "Tap the microphone and speak.",
+
+    listening: "Listening... Speak now.",
+
+    questionTitle: "Your Question",
+
+    questionDefault: "Your question appears here.",
+
+    answerTitle: "AI Answer",
+
+    answerDefault: "AI answer will appear here.",
+
+    hearButton: "Hear Answer",
+
+    stopButton: "Stop",
+
+    connecting: "Connecting to AI...",
+
+    waiting: "Please wait...",
+
+    success: "Answer received successfully!",
+
+    emptyQuestion: "Please type your question.",
+
+    noAnswer: "Please ask a question first.",
+
+    emptyAnswer: "AI returned an empty answer.",
+
+    serverError: "Server error.",
+
+    unableAnswer: "Sorry, unable to get an answer.",
+
+    microphoneError: "Microphone error: ",
+
+    chromeError: "Please use Google Chrome for voice input.",
+
+    speechError: "Speech generation error: ",
+
+    audioError: "Unable to play the generated audio."
+
+  }
+
+};
+
+
+// ------------------------------------
+// GET SELECTED LANGUAGE
+// ------------------------------------
 
 function getSelectedLanguage() {
-  const select = document.getElementById("language");
-  return (select && select.value) || "ta-IN";
+
+  return document.getElementById("language").value;
+
 }
+
+
+// ------------------------------------
+// UPDATE ALL SCREEN TEXT
+// ------------------------------------
 
 function onLanguageChange() {
+
   const langCode = getSelectedLanguage();
-  document.documentElement.lang = langCode.split("-")[0] || "ta";
-  stopSpeaking();
-}
 
-function pickVoiceForLang(langCode) {
-  if (!("speechSynthesis" in window)) return null;
-  const voices = window.speechSynthesis.getVoices() || [];
-  if (!voices.length) return null;
+  const t = translations[langCode];
 
-  const target = (langCode || "ta-IN").toLowerCase();
-  const baseLang = target.split("-")[0];
+  document.documentElement.lang =
+    langCode.split("-")[0];
 
-  // 1. Exact locale match (e.g., ta-IN, en-IN)
-  let match = voices.find(v => (v.lang || "").toLowerCase() === target);
-  if (match) return match;
+  document.getElementById("subtitle").textContent =
+    t.subtitle;
 
-  // 2. Same language code match (e.g., ta, en)
-  match = voices.find(v => {
-    const vLang = (v.lang || "").toLowerCase();
-    return vLang === baseLang || vLang.startsWith(baseLang + "-");
-  });
-  if (match) return match;
+  document.getElementById("voiceButton").textContent =
+    t.voiceButton;
 
-  // 3. Fallback to any English voice when English is selected
-  if (baseLang === "en") {
-    match = voices.find(v => (v.lang || "").toLowerCase().startsWith("en"));
-    if (match) return match;
+  document.getElementById("textInput").placeholder =
+    t.placeholder;
+
+  document.getElementById("sendButton").textContent =
+    t.sendButton;
+
+  document.getElementById("questionTitle").textContent =
+    t.questionTitle;
+
+  document.getElementById("answerTitle").textContent =
+    t.answerTitle;
+
+  document.getElementById("hearButton").textContent =
+    t.hearButton;
+
+  document.getElementById("stopButton").textContent =
+    t.stopButton;
+
+  document.getElementById("status").textContent =
+    t.initialStatus;
+
+  document.getElementById("question").textContent =
+    t.questionDefault;
+
+  // Change placeholder answer only if no answer exists
+  if (!latestAnswerText) {
+
+    document.getElementById("answer").textContent =
+      t.answerDefault;
+
   }
 
-  return null;
+  // Stop audio when language changes
+  stopSpeaking();
+
 }
+
+
+// ------------------------------------
+// VOICE INPUT
+// ------------------------------------
 
 function startListening() {
+
+  const t = translations[getSelectedLanguage()];
+
   if (!SpeechRecognition) {
-    alert("Please use Google Chrome for voice input.");
+
+    alert(t.chromeError);
+
     return;
+
+  }
+
+  if (recognition) {
+
+    recognition.abort();
+
   }
 
   const langCode = getSelectedLanguage();
+
   recognition = new SpeechRecognition();
+
   recognition.lang = langCode;
+
   recognition.continuous = false;
+
   recognition.interimResults = false;
 
   document.getElementById("status").textContent =
-    "Listening... Speak now.";
+    t.listening;
 
   recognition.onresult = function(event) {
-    const spokenText = event.results[0][0].transcript;
-    document.getElementById("textInput").value = spokenText;
+
+    const spokenText =
+      event.results[0][0].transcript;
+
+    document.getElementById("textInput").value =
+      spokenText;
+
     sendQuestion(spokenText);
+
   };
+
 
   recognition.onerror = function(event) {
+
     document.getElementById("status").textContent =
-      "Microphone error: " + event.error;
+      t.microphoneError + event.error;
+
   };
 
+
   recognition.start();
+
 }
 
+
+// ------------------------------------
+// TEXT INPUT
+// ------------------------------------
+
 function askFromText() {
-  const question = document.getElementById("textInput").value.trim();
+
+  const question =
+    document.getElementById("textInput").value.trim();
+
+  const t = translations[getSelectedLanguage()];
 
   if (!question) {
-    alert("Please type your question.");
+
+    alert(t.emptyQuestion);
+
     return;
+
   }
 
   sendQuestion(question);
+
 }
+
+
+// ------------------------------------
+// SEND QUESTION TO GROQ AI
+// ------------------------------------
 
 async function sendQuestion(questionText) {
 
   stopSpeaking();
+
   answerText = "";
+
   latestAnswerText = "";
-  
-  const status = document.getElementById("status");
-  const answer = document.getElementById("answer");
+
   const langCode = getSelectedLanguage();
 
-  document.getElementById("question").textContent = questionText;
-  status.textContent = "Connecting to AI...";
-  answer.textContent = "Please wait...";
+  const t = translations[langCode];
+
+  const status =
+    document.getElementById("status");
+
+  const answer =
+    document.getElementById("answer");
+
+  document.getElementById("question").textContent =
+    questionText;
+
+  status.textContent = t.connecting;
+
+  answer.textContent = t.waiting;
+
 
   try {
+
     const response = await fetch("/ask", {
+
       method: "POST",
+
       headers: {
+
         "Content-Type": "application/json"
+
       },
+
       body: JSON.stringify({
+
         question: questionText,
+
         language: langCode
+
       })
+
     });
+
 
     const data = await response.json();
 
+
     if (!response.ok) {
-      throw new Error(data.error || data.answer || "Server error");
+
+      throw new Error(
+        data.error || data.answer || t.serverError
+      );
+
     }
+
 
     answerText = data.answer;
+
     latestAnswerText = data.answer;
 
+
     if (!answerText) {
-      throw new Error("AI returned an empty answer.");
+
+      throw new Error(t.emptyAnswer);
+
     }
+
 
     answer.textContent = answerText;
-    status.textContent = "Answer received successfully!";
 
+    status.textContent = t.success;
+
+
+    // Automatically read the AI answer
     speakAnswer(langCode);
 
-  } catch (error) {
-    answer.textContent = "Sorry, unable to get an answer.";
-    status.textContent = "Error: " + error.message;
+
   }
+
+  catch (error) {
+
+    answer.textContent = t.unableAnswer;
+
+    status.textContent =
+      "Error: " + error.message;
+
+  }
+
 }
 
+
+// ------------------------------------
+// SARVAM TEXT TO SPEECH
+// ------------------------------------
 
 async function speakAnswer(langCode) {
-    try {
-        const text = latestAnswerText;
 
-        if (!text) {
-            alert("Please ask a question first.");
-            return;
-        }
+  const selectedLanguage =
+    langCode || getSelectedLanguage();
 
-        stopSpeaking();
+  const t = translations[selectedLanguage];
 
-        const response = await fetch("/speak", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                text: text,
-                language: langCode || getSelectedLanguage()
-            })
-        });
+  try {
 
-        const data = await response.json();
+    const text = latestAnswerText;
 
-        if (!response.ok) {
-            throw new Error(data.error || "Speech generation failed");
-        }
+    if (!text) {
 
-        const binary = atob(data.audio);
-        const bytes = new Uint8Array(binary.length);
+      alert(t.noAnswer);
 
-        for (let i = 0; i < binary.length; i++) {
-            bytes[i] = binary.charCodeAt(i);
-        }
+      return;
 
-        const audioBlob = new Blob(
-            [bytes],
-            { type: data.mime_type || "audio/mpeg" }
-        );
-
-        const audioUrl = URL.createObjectURL(audioBlob);
-
-        currentSarvamAudio = new Audio(audioUrl);
-
-        currentSarvamAudio.onended = () => {
-            URL.revokeObjectURL(audioUrl);
-            currentSarvamAudio = null;
-        };
-
-        currentSarvamAudio.onerror = () => {
-            URL.revokeObjectURL(audioUrl);
-            currentSarvamAudio = null;
-            alert("Unable to play the generated audio.");
-        };
-
-        await currentSarvamAudio.play();
-
-    } catch (error) {
-        console.error("Sarvam speech error:", error);
-        alert("Speech error: " + error.message);
     }
+
+    stopSpeaking();
+
+
+    const response = await fetch("/speak", {
+
+      method: "POST",
+
+      headers: {
+
+        "Content-Type": "application/json"
+
+      },
+
+      body: JSON.stringify({
+
+        text: text,
+
+        language: selectedLanguage
+
+      })
+
+    });
+
+
+    const data = await response.json();
+
+
+    if (!response.ok) {
+
+      throw new Error(
+        data.error || t.speechError
+      );
+
+    }
+
+
+    if (!data.audio) {
+
+      throw new Error(t.audioError);
+
+    }
+
+
+    const binary = atob(data.audio);
+
+    const bytes = new Uint8Array(binary.length);
+
+
+    for (let i = 0; i < binary.length; i++) {
+
+      bytes[i] = binary.charCodeAt(i);
+
+    }
+
+
+    const audioBlob = new Blob(
+
+      [bytes],
+
+      { type: data.mime_type || "audio/mpeg" }
+
+    );
+
+
+    const audioUrl =
+      URL.createObjectURL(audioBlob);
+
+
+    currentSarvamAudio = new Audio(audioUrl);
+
+
+    currentSarvamAudio.onended = function() {
+
+      URL.revokeObjectURL(audioUrl);
+
+      currentSarvamAudio = null;
+
+    };
+
+
+    currentSarvamAudio.onerror = function() {
+
+      URL.revokeObjectURL(audioUrl);
+
+      currentSarvamAudio = null;
+
+      alert(t.audioError);
+
+    };
+
+
+    await currentSarvamAudio.play();
+
+
+  }
+
+  catch (error) {
+
+    console.error("Sarvam speech error:", error);
+
+    alert(t.speechError + error.message);
+
+  }
+
 }
 
+
+// ------------------------------------
+// STOP AUDIO
+// ------------------------------------
+
 function stopSpeaking() {
-    if (currentSarvamAudio) {
-        currentSarvamAudio.pause();
 
-        if (currentSarvamAudio.src) {
-            URL.revokeObjectURL(currentSarvamAudio.src);
-        }
+  if (currentSarvamAudio) {
 
-        currentSarvamAudio = null;
+    const audioUrl = currentSarvamAudio.src;
+
+    currentSarvamAudio.pause();
+
+    currentSarvamAudio.currentTime = 0;
+
+    currentSarvamAudio = null;
+
+    if (audioUrl.startsWith("blob:")) {
+
+      URL.revokeObjectURL(audioUrl);
+
     }
 
-    if ("speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
-    }
-}  
+  }
+
+
+  if ("speechSynthesis" in window) {
+
+    window.speechSynthesis.cancel();
+
+  }
+
+}
+
+
+// ------------------------------------
+// INITIALIZE APPLICATION
+// ------------------------------------
 
 onLanguageChange();
+
 </script>
 
 </body>
