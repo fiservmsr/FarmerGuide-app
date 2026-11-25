@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="ta">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Farmer Friend </title>
+<style>
+body {
+  font-family: Arial, sans-serif;
+  background: #eaf7e9;
+  text-align: center;
+  padding: 15px;
+  margin: 0;
+}
+.container {
+  max-width: 500px;
+  margin: 20px auto;
+  background: white;
+  padding: 20px;
+  border-radius: 18px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+button, select, input {
+  padding: 14px;
+  margin: 8px 0;
+  border-radius: 10px;
+  font-size: 16px;
+  width: 100%;
+  box-sizing: border-box;
+}
+select, input {
+  border: 1px solid #ccc;
+}
+button {
+  background: #168447;
+  color: white;
+  border: 0;
+  cursor: pointer;
+  font-weight: bold;
+}
+#answer {
+  background: #f0f7ef;
+  padding: 16px;
+  border-radius: 12px;
+  min-height: 65px;
+  text-align: left;
+  line-height: 1.6;
+  white-space: pre-line;
+}
+.audio-row {
+  display: flex;
+  gap: 8px;
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+  <h1>🌾 AI Farmer Friend Raghu</h1>
+  <p>விவசாயிகளுக்கான AI உதவியாளர்</p>
+
+  <select id="language" onchange="onLanguageChange()">
+    <option value="ta-IN">தமிழ் (Tamil)</option>
+    <option value="en-IN">English</option>
+  </select>
+
+  <button type="button" onclick="startListening()">🎤 Ask by Voice</button>
+
+  <input
+    type="text"
+    id="textInput"
+    placeholder="Or type your question here and press Enter..."
+    onkeydown="if (event.key === 'Enter') askFromText()"
+  />
+  <button type="button" onclick="askFromText()" style="background:#2b7a78;">📩 Send Question</button>
+
+  <p id="status">Tap the microphone and speak.</p>
+
+  <h3>Your Question</h3>
+  <p id="question">Your question appears here.</p>
+
+  <h3>AI Answer</h3>
+  <div id="answer">AI answer will appear here.</div>
+
+  <div class="audio-row">
+    <button type="button" onclick="speakAnswer()">🔊 Hear Answer</button>
+    <button type="button" onclick="stopSpeaking()" style="background:#b93829;">⏹ Stop</button>
+  </div>
+</div>
+
+<script>
+let answerText = "";
+let recognition;
+let latestAnswerText = "";
+let currentSarvamAudio = null;
+const SpeechRecognition =
+  window.SpeechRecognition || window.webkitSpeechRecognition;
+
+
+
+  
+
+// Warm up voices list early on browsers that load voices asynchronously
+if ("speechSynthesis" in window) {
+  window.speechSynthesis.getVoices();
+  window.speechSynthesis.addEventListener("voiceschanged", () => {
+    window.speechSynthesis.getVoices();
+  });
+}
+
+function getSelectedLanguage() {
+  const select = document.getElementById("language");
+  return (select && select.value) || "ta-IN";
+}
+
+function onLanguageChange() {
+  const langCode = getSelectedLanguage();
+  document.documentElement.lang = langCode.split("-")[0] || "ta";
+  stopSpeaking();
+}
+
+function pickVoiceForLang(langCode) {
+  if (!("speechSynthesis" in window)) return null;
+  const voices = window.speechSynthesis.getVoices() || [];
+  if (!voices.length) return null;
+
+  const target = (langCode || "ta-IN").toLowerCase();
+  const baseLang = target.split("-")[0];
+
+  // 1. Exact locale match (e.g., ta-IN, en-IN)
+  let match = voices.find(v => (v.lang || "").toLowerCase() === target);
+  if (match) return match;
+
+  // 2. Same language code match (e.g., ta, en)
+  match = voices.find(v => {
+    const vLang = (v.lang || "").toLowerCase();
+    return vLang === baseLang || vLang.startsWith(baseLang + "-");
+  });
+  if (match) return match;
+
+  // 3. Fallback to any English voice when English is selected
+  if (baseLang === "en") {
+    match = voices.find(v => (v.lang || "").toLowerCase().startsWith("en"));
+    if (match) return match;
+  }
+
+  return null;
+}
+
+function startListening() {
+  if (!SpeechRecognition) {
+    alert("Please use Google Chrome for voice input.");
+    return;
+  }
+
+  const langCode = getSelectedLanguage();
+  recognition = new SpeechRecognition();
+  recognition.lang = langCode;
+  recognition.continuous = false;
+  recognition.interimResults = false;
+
+  document.getElementById("status").textContent =
+    "Listening... Speak now.";
+
+  recognition.onresult = function(event) {
+    const spokenText = event.results[0][0].transcript;
+    document.getElementById("textInput").value = spokenText;
+    sendQuestion(spokenText);
+  };
+
+  recognition.onerror = function(event) {
+    document.getElementById("status").textContent =
+      "Microphone error: " + event.error;
+  };
+
+  recognition.start();
+}
+
+function askFromText() {
+  const question = document.getElementById("textInput").value.trim();
+
+  if (!question) {
+    alert("Please type your question.");
+    return;
+  }
+
+  sendQuestion(question);
+}
+
+async function sendQuestion(questionText) {
+
+  stopSpeaking();
+  answerText = "";
+  latestAnswerText = "";
+  
+  const status = document.getElementById("status");
+  const answer = document.getElementById("answer");
+  const langCode = getSelectedLanguage();
+
+  document.getElementById("question").textContent = questionText;
+  status.textContent = "Connecting to AI...";
+  answer.textContent = "Please wait...";
+
+  try {
+    const response = await fetch("/ask", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        question: questionText,
+        language: langCode
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || data.answer || "Server error");
+    }
+
+    answerText = data.answer;
+    latestAnswerText = data.answer;
+
+    if (!answerText) {
+      throw new Error("AI returned an empty answer.");
+    }
+
+    answer.textContent = answerText;
+    status.textContent = "Answer received successfully!";
+
+    speakAnswer(langCode);
+
+  } catch (error) {
+    answer.textContent = "Sorry, unable to get an answer.";
+    status.textContent = "Error: " + error.message;
+  }
+}
+
+
+async function speakAnswer(langCode) {
+    try {
+        const text = latestAnswerText;
+
+        if (!text) {
+            alert("Please ask a question first.");
+            return;
+        }
+
+        stopSpeaking();
+
+        const response = await fetch("/speak", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                text: text,
+                language: langCode || getSelectedLanguage()
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || "Speech generation failed");
+        }
+
+        const binary = atob(data.audio);
+        const bytes = new Uint8Array(binary.length);
+
+        for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+        }
+
+        const audioBlob = new Blob(
+            [bytes],
+            { type: data.mime_type || "audio/mpeg" }
+        );
+
+        const audioUrl = URL.createObjectURL(audioBlob);
+
+        currentSarvamAudio = new Audio(audioUrl);
+
+        currentSarvamAudio.onended = () => {
+            URL.revokeObjectURL(audioUrl);
+            currentSarvamAudio = null;
+        };
+
+        currentSarvamAudio.onerror = () => {
+            URL.revokeObjectURL(audioUrl);
+            currentSarvamAudio = null;
+            alert("Unable to play the generated audio.");
+        };
+
+        await currentSarvamAudio.play();
+
+    } catch (error) {
+        console.error("Sarvam speech error:", error);
+        alert("Speech error: " + error.message);
+    }
+}
+
+function stopSpeaking() {
+    if (currentSarvamAudio) {
+        currentSarvamAudio.pause();
+
+        if (currentSarvamAudio.src) {
+            URL.revokeObjectURL(currentSarvamAudio.src);
+        }
+
+        currentSarvamAudio = null;
+    }
+
+    if ("speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+    }
+}  
+
+onLanguageChange();
+</script>
+
+</body>
+</html>
